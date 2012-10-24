@@ -3,39 +3,56 @@
   // Plot types.
   var lp = root.linePlot = function (ctx, ds, data) {
     var line = d3.svg.line().x(function (d) { return ctx.xscale(ds.x(d)); })
-                            .y(function (d) { return ctx.yscale(ds.y(d)); });
+                            .y(function (d) { return ctx.yscale(ds.y(d)); }),
+        lbl = _get(ds, "label", "dataset");
 
     // Plot the new line.
-    var selection = ctx.g.selectAll("path."+ds.label).data([data]);
+    var selection = ctx.g.selectAll("path."+lbl).data([data]);
 
     // Add the line if it doesn't already exit.
-    selection.enter().append("path").attr("class", ds.label);
+    selection.enter().append("path").attr("class", lbl);
 
     // Remove any leftover lines.
     selection.exit().remove();
 
-    // Update the position of the line.
-    ctx.g.select("path."+ds.label).attr("d", line(data));
+    // Update the position and styles of the line.
+    var attrs = _get(ds.opts, "attrs", {}),
+        styles = _get(ds.opts, "styles", {});
+
+    selection = ctx.g.select("path."+lbl).attr("d", line(data));
+
+    // By default the line should not be filled.
+    selection.attr("fill", "none").attr("stroke", "black");
+
+    // Update user defined attributes.
+    for (var k in attrs) selection.attr(k, attrs[k]);
+    for (var k in styles) selection.style(k, styles[k]);
   };
 
   var scatter = root.scatterPlot = function (ctx, ds, data) {
     var cx = function (d) { return ctx.xscale(ds.x(d)); },
-        cy = function (d) { return ctx.yscale(ds.y(d)); };
+        cy = function (d) { return ctx.yscale(ds.y(d)); },
+        lbl = _get(ds, "label", "dataset");
 
     // Plot the new line.
-    var selection = ctx.g.selectAll("circle."+ds.label).data(data);
+    var selection = ctx.g.selectAll("circle."+lbl).data(data);
 
     // Add more points if needed.
-    selection.enter().append("circle").attr("class", ds.label);
+    selection.enter().append("circle").attr("class", lbl);
 
     // Remove old ones.
     selection.exit().remove();
 
-    // Update all the positions of the points.
-    ctx.g.selectAll("circle."+ds.label).attr("cx", cx)
-                                       .attr("cy", cy)
-                                       .attr("r", 3)
-                                       .attr("fill", "black");
+    // Update the position and styles of the points.
+    var attrs = _get(ds.opts, "attrs", {}),
+        styles = _get(ds.opts, "styles", {});
+
+    selection = ctx.g.selectAll("circle."+lbl);
+    selection.attr("cx", cx).attr("cy", cy);
+    selection.attr("r", _get(ds.opts, "r", 3.0));
+    selection.attr("fill", "black");
+    for (var k in attrs) selection.attr(k, attrs[k]);
+    for (var k in styles) selection.style(k, styles[k]);
   };
 
   // The plot object.
@@ -60,7 +77,7 @@
 
         // Compute the limits of the axes if they weren't provided.
         if (typeof xlim === "undefined") {
-          var rng = datasets.map(function(d,i){return d3.extent(data[d.label], d.x);});
+          var rng = datasets.map(function(d,i){return d3.extent(_get(data, d.label, data), d.x);});
           xl = [d3.min(rng, function(d) {return d[0];}),
                 d3.max(rng, function(d) {return d[1];})];
           var dx = xl[1] - xl[0];
@@ -68,7 +85,7 @@
           xl[1] += 0.1 * dx;
         }
         if (typeof ylim === "undefined") {
-          var rng = datasets.map(function(d,i){return d3.extent(data[d.label], d.y);});
+          var rng = datasets.map(function(d,i){return d3.extent(_get(data, d.label, data), d.y);});
           yl = [d3.min(rng, function(d) {return d[0];}),
                 d3.max(rng, function(d) {return d[1];})];
           var dy = yl[1] - yl[0];
@@ -124,15 +141,14 @@
         // Render the plots.
         var ctx = {eg: eg, g: g, xscale: xscale, yscale: yscale};
         datasets.map(function (d) {
-          console.log(d);
-          d.render(ctx, d, data[d.label]);
+          d.render(ctx, d, _get(data, d.label, data));
         });
 
       });
     };
 
     // Drawing function.
-    pl.plot = function (lbl, x, y, opts) {
+    pl.plot = function (x, y, opts) {
       // Data access functions.
       var x_ = x, y_ = y;
       if (typeof x !== "function") x = function (d) { return d[x_]; };
@@ -140,7 +156,6 @@
 
       // The plot rendering function.
       var rf = _get(opts, "render", lp);
-      console.log(rf);
 
       if (typeof rf !== "function") {
         if (rf === "line") rf = lp;
@@ -149,7 +164,10 @@
       }
 
       // Create a new dataset.
-      datasets.push({label: lbl, render: rf, x: x, y: y, opts: opts});
+      datasets.push({label: _get(opts, "label"),
+                     render: rf,
+                     x: x, y: y,
+                     opts: opts});
 
       return pl;
     };
