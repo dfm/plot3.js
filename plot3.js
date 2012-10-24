@@ -245,6 +245,12 @@
       return pl;
     };
 
+    pl.margin = function (v) {
+      if (!arguments.length) return margin;
+      margin = v;
+      return pl;
+    };
+
     // Nice rendering in the console.
     pl.toString = function () { return "plot3"; };
 
