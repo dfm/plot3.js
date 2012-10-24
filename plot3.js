@@ -1,13 +1,13 @@
 (function (root) {
 
   // Plot types.
-  var lp = root.linePlot = function (ctx, ds, data) {
+  root.linePlot = function (ctx, ds, data) {
     var line = d3.svg.line().x(function (d) { return ctx.xscale(ds.x(d)); })
                             .y(function (d) { return ctx.yscale(ds.y(d)); }),
         lbl = _get(ds, "label", "dataset");
 
     // Plot the new line.
-    var selection = ctx.g.selectAll("path."+lbl).data([data]);
+    var selection = ctx.g.selectAll("path."+lbl).data(data);
 
     // Add the line if it doesn't already exit.
     selection.enter().append("path").attr("class", lbl);
@@ -19,7 +19,7 @@
     var attrs = _get(ds.opts, "attrs", {}),
         styles = _get(ds.opts, "styles", {});
 
-    selection = ctx.g.select("path."+lbl).attr("d", line(data));
+    selection = ctx.g.selectAll("path."+lbl).attr("d", function (d) { return line(d) });
 
     // By default the line should not be filled.
     selection.attr("fill", "none").attr("stroke", "black");
@@ -29,12 +29,21 @@
     for (var k in styles) selection.style(k, styles[k]);
   };
 
-  var scatter = root.scatterPlot = function (ctx, ds, data) {
+  root.linePlot.extent = function (ds, data) {
+    var rng = data.map(function (d) { return [d3.extent(d, ds.x),
+                                              d3.extent(d, ds.y)]; });
+    return {xlim: [d3.min(rng, function (r) { return r[0][0]; }),
+                   d3.max(rng, function (r) { return r[0][1]; })],
+            ylim: [d3.min(rng, function (r) { return r[1][0]; }),
+                   d3.max(rng, function (r) { return r[1][1]; })]};
+  };
+
+  root.scatterPlot = function (ctx, ds, data) {
     var cx = function (d) { return ctx.xscale(ds.x(d)); },
         cy = function (d) { return ctx.yscale(ds.y(d)); },
-        lbl = _get(ds, "label", "dataset");
+        lbl = _get(ds, "label", "dataset"),
+        data = data.reduce(function (a, b) { a.concat(b); });
 
-    // Plot the new line.
     var selection = ctx.g.selectAll("circle."+lbl).data(data);
 
     // Add more points if needed.
@@ -53,6 +62,15 @@
     selection.attr("fill", "black");
     for (var k in attrs) selection.attr(k, attrs[k]);
     for (var k in styles) selection.style(k, styles[k]);
+  };
+
+  root.scatterPlot.extent = function (ds, data) {
+    var rng = data.map(function (d) { return [d3.extent(d, ds.x),
+                                              d3.extent(d, ds.y)]; });
+    return {xlim: [d3.min(rng, function (r) { return r[0][0]; }),
+                   d3.max(rng, function (r) { return r[0][1]; })],
+            ylim: [d3.min(rng, function (r) { return r[1][0]; }),
+                   d3.max(rng, function (r) { return r[1][1]; })]};
   };
 
   // The plot object.
@@ -75,19 +93,25 @@
 
         var xl = xlim, yl = ylim;
 
+        data = datasets.map(function (d, i) {
+          var dt = _get(data, d.label, data);
+          // Deal with multiple datasets.
+          if (typeof d.x(dt[0]) === "number") dt = [dt];
+          return dt;
+        });
+
         // Compute the limits of the axes if they weren't provided.
+        var extent = datasets.map(function(d,i){return d.render.extent(d, data[i]);});
         if (typeof xlim === "undefined") {
-          var rng = datasets.map(function(d,i){return d3.extent(_get(data, d.label, data), d.x);});
-          xl = [d3.min(rng, function(d) {return d[0];}),
-                d3.max(rng, function(d) {return d[1];})];
+          xl = [d3.min(extent, function(d) {return d.xlim[0];}),
+                d3.max(extent, function(d) {return d.xlim[1];})];
           var dx = xl[1] - xl[0];
           xl[0] -= 0.1 * dx;
           xl[1] += 0.1 * dx;
         }
         if (typeof ylim === "undefined") {
-          var rng = datasets.map(function(d,i){return d3.extent(_get(data, d.label, data), d.y);});
-          yl = [d3.min(rng, function(d) {return d[0];}),
-                d3.max(rng, function(d) {return d[1];})];
+          yl = [d3.min(extent, function(d) {return d.ylim[0];}),
+                d3.max(extent, function(d) {return d.ylim[1];})];
           var dy = yl[1] - yl[0];
           yl[0] -= 0.1 * dy;
           yl[1] += 0.1 * dy;
@@ -140,8 +164,8 @@
 
         // Render the plots.
         var ctx = {eg: eg, g: g, xscale: xscale, yscale: yscale};
-        datasets.map(function (d) {
-          d.render(ctx, d, _get(data, d.label, data));
+        datasets.map(function (d, i) {
+          d.render(ctx, d, data[i]);
         });
 
       });
@@ -155,11 +179,11 @@
       if (typeof y !== "function") y = function (d) { return d[y_]; };
 
       // The plot rendering function.
-      var rf = _get(opts, "render", lp);
+      var rf = _get(opts, "render", root.linePlot);
 
       if (typeof rf !== "function") {
-        if (rf === "line") rf = lp;
-        else if (rf === "scatter") rf = scatter;
+        if (rf === "line") rf = root.linePlot;
+        else if (rf === "scatter") rf = root.scatterPlot;
         else throw "Unknown rendering function.";
       }
 
